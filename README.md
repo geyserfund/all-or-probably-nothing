@@ -26,7 +26,7 @@ Yes, this software was originally released under a Creative Commons license, rea
 ## Installation
 
 ```
-git clone geyserfund/all-or-probably-nothing
+git clone https://github.com/geyserfund/all-or-probably-nothing.git
 cd all-or-probably-nothing
 npm init
 npm install ws browserify-cipher noble-secp256k1 bitcoinjs-lib axios crypto fs
