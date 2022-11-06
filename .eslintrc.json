@@ -10,11 +10,9 @@
     "sourceType": "module"
   },
   "extends": [
-    "plugin:@typescript-eslint/recommended",
     "eslint:recommended",
-    "plugin:prettier/recommended",
     "plugin:vue/vue3-recommended",
-    "plugin:vue/recommended"
+    "prettier"
   ],
   "plugins": [
     "prettier",
