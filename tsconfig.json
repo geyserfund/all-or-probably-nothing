@@ -11,6 +11,11 @@
     "esModuleInterop": true,
     "sourceMap": true,
     "declaration": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+    }
   }
 }

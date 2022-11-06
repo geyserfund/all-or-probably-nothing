@@ -13,6 +13,11 @@ export const routes: Array<RouteRecordRaw> = [
     name: RouteNames.create,
     component: () => import('@/views/Create.vue'),
   },
+  {
+    path: '/contribute',
+    name: RouteNames.contribute,
+    component: () => import('@/views/Contribute.vue'),
+  },
   // {
   //   path: '*',
   //   redirect: { name: RouteNames.home },
