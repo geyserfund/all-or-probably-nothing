@@ -84,7 +84,7 @@ async function sendPublicFundraiserMessage(message) {
   redemption_content['redemption_url'] = second_url;
   redemption_file['content'] = redemption_content;
   saveData(JSON.stringify(redemption_file), 'redemption_file.json');
-  var second_url = window.location.href.substring(0, window.location.href.indexOf('create.htm')) + 'redemption.html';
+  second_url = window.location.href.substring(0, window.location.href.indexOf('create.htm')) + 'redemption.html';
   var alert = `A file called redemption_file.json was just downloaded on your computer. This file contains all of the information you need to take your money if the fundraiser raises the right amount, except a piece of data from your oracle, which you'll only get if the fundraiser raises the right amount. To get this last piece of data, wait til the fundraiser is over and raised the right amount of money, then visit this link to redeem all that money: <a href="${second_url}" target="_blank">${second_url}</a> -- note that you only have 24 hours after the fundraiser ends to take the money, if you wait longer than that, everyone gets their money back.`;
   document.getElementById(
     'link'
@@ -274,7 +274,6 @@ function modalVanish() {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, user-scalable=no" />
   </head>
-
   <body>
     <h1>Create a fundraiser</h1>
     <p>Fundraiser name</p>
