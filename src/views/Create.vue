@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import * as secp from '@noble/secp256k1';
+import * as secp from 'noble-secp256k1';
 import * as bitcoinjs from 'bitcoinjs-lib';
 import { ECPairFactory, ECPairAPI } from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import * as browserifyCipher from 'browserify-cipher';
+import { ref } from 'vue';
 const ECPair: ECPairAPI = ECPairFactory(tinysecp);
+
+const name = ref<string>('');
+const goal = ref<number>(1);
+const date = ref<string>();
 
 sessionStorage.clear();
 var { getSharedSecret, schnorr, utils } = secp;
@@ -15,9 +20,8 @@ var nostr_keypair = ECPair.makeRandom();
 var nostr_privKey = nostr_keypair.privateKey.toString('hex');
 var nostr_pubKey = nostr_keypair.publicKey.toString('hex');
 nostr_pubKey = nostr_pubKey.substring(2);
-console.log('nostr_pubKey:', nostr_pubKey);
-var oracle_nostr = 'ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7';
-var oracle_pubkey = '02ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7';
+var oracle_nostr = '684e4168f129ca09d3ca1a4b4ad6561773ee6b91679a39558f51e3d32a64c3aa';
+var oracle_pubkey = '02684e4168f129ca09d3ca1a4b4ad6561773ee6b91679a39558f51e3d32a64c3aa';
 var relay = 'wss://relay.damus.io';
 var socket = new WebSocket(relay);
 socket.addEventListener('message', handleMessage);
@@ -101,7 +105,7 @@ async function getSignedEvent(event, privateKey) {
     event['tags'], // Tags identify replies/recipients
     event['content'], // Your note contents
   ]);
-  event.id = sha256(eventData).toString('hex');
+  event.id = sha256(Buffer.from(eventData)).toString('hex');
   event.sig = await schnorr.sign(event.id, privateKey);
   return event;
 }
@@ -223,9 +227,8 @@ async function doBackgroundTasks() {
   }, 10000);
 }
 doBackgroundTasks();
-async function preparePublicMessage(name, goal, date) {
-  date = date.split('-');
-  goal = Number(goal);
+async function preparePublicMessage() {
+  const dateArray = date.value.split('-').map((i) => +i);
   var msg_for_oracle = {};
   msg_for_oracle['type'] = 'init';
   setTimeout(function () {
@@ -237,14 +240,14 @@ async function preparePublicMessage(name, goal, date) {
   var oracle_hash = JSON.parse(hash_and_sig)['hash'];
   var oracle_sig = JSON.parse(hash_and_sig)['sig'];
   var msgpreimg = `this hash: ${oracle_hash} is valid only for the fundraiser created by this pubkey: ${nostr_pubKey}`;
-  var sigIsValid = await secp.verify(oracle_sig, bitcoinjs.crypto.sha256(msgpreimg), oracle_pubkey);
+  var sigIsValid = secp.verify(oracle_sig, bitcoinjs.crypto.sha256(Buffer.from(msgpreimg)), oracle_pubkey);
   if (!sigIsValid) {
     alert('something went horribly wrong');
     return;
   } else {
     console.log('yay the sig was valid');
   }
-  var timestamp = Math.floor(new Date(date[0], date[1] - 1, date[2]).getTime() / 1000) + 86400;
+  var timestamp = Math.floor(new Date(dateArray[0], dateArray[1] - 1, dateArray[2]).getTime() / 1000) + 86400;
   var keypair = ECPair.makeRandom();
   var privkey = keypair.privateKey.toString('hex');
   var pubkey = keypair.publicKey.toString('hex');
@@ -277,22 +280,13 @@ function modalVanish() {
   <body>
     <h1>Create a fundraiser</h1>
     <p>Fundraiser name</p>
-    <input id="name" type="text" name="name" />
+    <input id="name" v-model="name" type="text" name="name" />
     <p>Goal (in whole dollars, no cents)</p>
-    <input id="goal" type="number" name="goal" min="1" value="1" />
+    <input id="goal" v-model="goal" type="number" name="goal" min="1" />
     <p>End date</p>
-    <input id="enddate" type="date" name="enddate" />
+    <input id="enddate" v-model="date" type="date" name="enddate" />
     <p>
-      <button
-        id="submitter"
-        type="button"
-        name="submitter"
-        onclick="preparePublicMessage( 
-          document.getElementById('name').value, document.getElementById('goal' ).value,
-        document.getElementById( 'enddate' ).value );"
-      >
-        Submit
-      </button>
+      <button id="submitter" type="button" name="submitter" @click="preparePublicMessage()">Submit</button>
     </p>
     <div id="link" style="overflow-wrap: break-word" />
     <div id="black-bg" onclick="modalVanish();" />
