@@ -14,7 +14,7 @@ export const routes: Array<RouteRecordRaw> = [
     component: () => import('@/views/Create.vue'),
   },
   {
-    path: '/contribute',
+    path: '/contribute/:id',
     name: RouteNames.contribute,
     component: () => import('@/views/Contribute.vue'),
   },

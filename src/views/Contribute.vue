@@ -24,7 +24,7 @@ console.log('pubkey:', pubkey);
 var queryString = window.location.search;
 // var params = new URLSearchParams(queryString);
 const route = useRoute();
-var id = route.query?.id;
+var id = route.params?.id;
 console.log('id:', id);
 var num_of_fundraisers_by_creator = 0;
 async function theCreatorDidOnlyOneFundraiser(creator) {
