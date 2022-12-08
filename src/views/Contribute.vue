@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import * as QRCode from '@/modules/qrcode';
-import * as secp from '@noble/secp256k1';
+import * as secp from 'noble-secp256k1';
 import * as bitcoinjs from 'bitcoinjs-lib';
 import { ECPairFactory, ECPairAPI } from 'ecpair';
 import * as tinysecp from 'tiny-secp256k1';
 import * as browserifyCipher from 'browserify-cipher';
 import { Buffer } from 'buffer';
+import { ref } from 'vue';
+import { useRoute } from 'vue-router';
 const ECPair: ECPairAPI = ECPairFactory(tinysecp);
+
+const refundAddress = ref<string>('');
+const progressBarWidth = ref<string>('');
+const totalRaised = ref<number>(0);
 
 sessionStorage.clear();
 var keypair = ECPair.makeRandom();
@@ -16,8 +22,9 @@ sessionStorage['privkey'] = privkey;
 sessionStorage['pubkey'] = pubkey;
 console.log('pubkey:', pubkey);
 var queryString = window.location.search;
-var params = new URLSearchParams(queryString);
-var id = params.get('id');
+// var params = new URLSearchParams(queryString);
+const route = useRoute();
+var id = route.query?.id;
 console.log('id:', id);
 var num_of_fundraisers_by_creator = 0;
 async function theCreatorDidOnlyOneFundraiser(creator) {
@@ -34,9 +41,8 @@ async function theCreatorDidOnlyOneFundraiser(creator) {
   }
   return false;
 }
-function waitSomeSeconds(num) {
-  var num = num.toString() + '000';
-  num = Number(num);
+function waitSomeSeconds(_num) {
+  var num = +(_num.toString() + '000');
   return new Promise(function (resolve, reject) {
     setTimeout(function () {
       resolve('');
@@ -94,6 +100,7 @@ function checkHeartbeat() {
 async function setFundraiserDetails(content, sender) {
   if (!isValidJson(content)) return;
   var json = JSON.parse(content);
+  var oracle_hash;
   if (json['type'] == 'funding info') {
     console.log(content);
     var pubkey = JSON.parse(content)['content']['pubkey'];
@@ -101,7 +108,7 @@ async function setFundraiserDetails(content, sender) {
     var txindex = JSON.parse(content)['content']['txindex'];
     var timestamp = Number(sessionStorage['timestamp']);
     var contributorkey = pubkey;
-    var oracle_hash = sessionStorage['oracle_hash'];
+    oracle_hash = sessionStorage['oracle_hash'];
     var creatorkey = sessionStorage['creatorkey'];
     var goal = Number(sessionStorage['goal']);
     console.log('address info:', timestamp, contributorkey, oracle_hash, creatorkey);
@@ -110,10 +117,11 @@ async function setFundraiserDetails(content, sender) {
     var claimed_address = JSON.parse(data)['vout'][txindex]['scriptpubkey_address'];
     if (claimed_address != real_address) return;
     var value = JSON.parse(data)['vout'][txindex]['value'];
+    var utxos;
     if (sessionStorage['utxos']) {
-      var utxos = JSON.parse(sessionStorage['utxos']);
+      utxos = JSON.parse(sessionStorage['utxos']);
     } else {
-      var utxos = {};
+      utxos = {};
     }
     var utxo = {};
     utxo['txid'] = txid;
@@ -124,11 +132,12 @@ async function setFundraiserDetails(content, sender) {
     utxos[txid] = utxo;
     sessionStorage['utxos'] = JSON.stringify(utxos);
     var value_in_dollars = satsToBitcoin(value) * Number(sessionStorage['bitcoin_price']);
+    var total;
     if (sessionStorage['total']) {
-      var total = Number(sessionStorage['total']) + value_in_dollars;
+      total = Number(sessionStorage['total']) + value_in_dollars;
       sessionStorage['total'] = total;
     } else {
-      var total = value_in_dollars;
+      total = value_in_dollars;
       sessionStorage['total'] = total;
     }
     console.log(Math.round(total.toFixed(2)));
@@ -136,8 +145,8 @@ async function setFundraiserDetails(content, sender) {
     if (width > 100) {
       width = 100;
     }
-    document.getElementById('progressBar').style.width = width + '%';
-    document.getElementById('total').innerText = `raised so far: $${Math.round(total.toFixed(2))}`;
+    progressBarWidth.value = width + '%';
+    totalRaised.value = Math.round(+total.toFixed(2));
     document.getElementById('progressIndicator').style.width =
       'calc( ' + width + '% - ' + document.getElementById('total').offsetWidth + 'px';
   } else {
@@ -147,11 +156,11 @@ async function setFundraiserDetails(content, sender) {
       return;
     }
     var name = json['name'];
-    var oracle_hash = json['oracle_hash'];
+    oracle_hash = json['oracle_hash'];
     var oracle_pubkey = json['oracle_pubkey'];
     var oracle_sig = json['oracle_sig'];
     var msg = `this hash: ${oracle_hash} is valid only for the fundraiser created by this pubkey: ${sender}`;
-    var sigIsValid = await secp.verify(oracle_sig, bitcoinjs.crypto.sha256(msg), oracle_pubkey);
+    var sigIsValid = await secp.verify(oracle_sig, bitcoinjs.crypto.sha256(Buffer.from(msg)), oracle_pubkey);
     if (!sigIsValid || !trusted_oracles.includes(oracle_pubkey)) {
       alert('something went horribly wrong');
       return;
@@ -159,12 +168,12 @@ async function setFundraiserDetails(content, sender) {
       console.log('yay the sig was valid');
     }
     var creator_pubkey = json['creator_pubkey'];
-    var timestamp = json['timestamp'];
-    var goal = json['goal'];
+    timestamp = json['timestamp'];
+    goal = json['goal'];
     var denomination = json['denomination'];
     var creator = sender;
-    var contributorkey = sessionStorage['pubkey'];
-    var creatorkey = creator_pubkey;
+    contributorkey = sessionStorage['pubkey'];
+    creatorkey = creator_pubkey;
     sessionStorage['creator'] = creator;
     sessionStorage['timestamp'] = timestamp;
     sessionStorage['oracle_hash'] = oracle_hash;
@@ -179,10 +188,9 @@ async function setFundraiserDetails(content, sender) {
     var message = `Please enter a bitcoin address. If $${goal.toLocaleString()} is not raised by ${new Date(
       (timestamp - 86400) * 1000
     ).toLocaleDateString()}, you will get a full refund, minus a mining fee.`;
-    var goal = `Goal: $${goal.toLocaleString()}`;
     document.getElementById('title').innerText = name;
     document.getElementById('message').innerText = message;
-    document.getElementById('goal').innerText = goal;
+    document.getElementById('goal').innerText = `Goal: $${goal.toLocaleString()}`;
     document.getElementById('loading').style.display = 'none';
     document.getElementById('meaningful_content').style.display = 'block';
     var subId2 = ECPair.makeRandom().privateKey.toString('hex');
@@ -220,9 +228,9 @@ function makeFundraiserAddress(timestamp, contributorkey, oracle_hash, creatorke
   var p2wsh = bitcoinjs.payments.p2wsh({
     redeem: {
       output: generateFundraiserScript(timestamp, contributorkey, oracle_hash, creatorkey),
-      network: bitcoinjs.networks.mainnet,
+      network: bitcoinjs.networks.bitcoin,
     },
-    network: bitcoinjs.networks.mainnet,
+    network: bitcoinjs.networks.bitcoin,
   });
   return p2wsh.address;
 }
@@ -236,7 +244,7 @@ var nostr_pubKey = nostr_keypair.publicKey.toString('hex');
 nostr_pubKey = nostr_pubKey.substring(2);
 console.log('nostr_pubKey:', nostr_pubKey);
 const trusted_oracles = [];
-trusted_oracles.push('02ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7');
+trusted_oracles.push('02684e4168f129ca09d3ca1a4b4ad6561773ee6b91679a39558f51e3d32a64c3aa');
 var relay = 'wss://relay.damus.io';
 var socket = new WebSocket(relay);
 socket.addEventListener('message', handleMessage);
@@ -279,7 +287,7 @@ async function getSignedEvent(event, privateKey) {
     event['tags'], // Tags identify replies/recipients
     event['content'], // Your note contents
   ]);
-  event.id = sha256(eventData).toString('hex');
+  event.id = sha256(Buffer.from(eventData)).toString('hex');
   event.sig = await schnorr.sign(event.id, privateKey);
   return event;
 }
@@ -301,7 +309,10 @@ function base64ToHex(str) {
   return result;
 }
 function encrypt(privkey, pubkey, text) {
-  var key = secp.getSharedSecret(privkey, '02' + pubkey, true).substring(2);
+  var key = secp
+    .getSharedSecret(privkey, '02' + pubkey, true)
+    .toString()
+    .substring(2);
   var iv = window.crypto.getRandomValues(new Uint8Array(16));
   var cipher = browserifyCipher.createCipheriv('aes-256-cbc', hexToBytes(key), iv);
   var encryptedMessage = cipher.update(text, 'utf8', 'base64');
@@ -312,7 +323,10 @@ function encrypt(privkey, pubkey, text) {
 }
 function decrypt(privkey, pubkey, ciphertext) {
   var [emsg, iv] = ciphertext.split('?iv=');
-  var key = secp.getSharedSecret(privkey, '02' + pubkey, true).substring(2);
+  var key = secp
+    .getSharedSecret(privkey, '02' + pubkey, true)
+    .toString()
+    .substring(2);
   var decipher = browserifyCipher.createDecipheriv('aes-256-cbc', hexToBytes(key), hexToBytes(base64ToHex(iv)));
   var decryptedMessage = decipher.update(emsg, 'base64');
   var dmsg = decryptedMessage + decipher.final('utf8');
@@ -355,18 +369,18 @@ function prepareTx(txid, txindex, amount, myaddress, privkey, timestamp, contrib
   var witnessscript = generateFundraiserScript(timestamp, contributorkey, oracle_hash, creatorkey);
   console.log('witnessscript:', witnessscript.toString('hex'));
   var p2wsh = bitcoinjs.payments.p2wsh({
-    redeem: { output: witnessscript, network: bitcoinjs.networks.mainnet },
-    network: bitcoinjs.networks.mainnet,
+    redeem: { output: witnessscript, network: bitcoinjs.networks.bitcoin },
+    network: bitcoinjs.networks.bitcoin,
   });
   console.log(
     'these are the same, right?',
-    '0020' + bitcoinjs.crypto.sha256(witnessscript).toString('hex').toString('hex'),
+    '0020' + bitcoinjs.crypto.sha256(witnessscript).toString('hex'),
     '0020' + bitcoinjs.crypto.sha256(Buffer.from(witnessscript, 'hex')).toString('hex'),
     '0020' + bitcoinjs.crypto.sha256(p2wsh.output).toString('hex'),
     'hex'
   );
   var outputscript = '00' + bitcoinjs.crypto.sha256(witnessscript).toString('hex');
-  var psbt = new bitcoinjs.Psbt({ network: bitcoinjs.networks.mainnet });
+  var psbt = new bitcoinjs.Psbt({ network: bitcoinjs.networks.bitcoin });
   psbt.setLocktime(timestamp);
   psbt.addInput({
     hash: txid,
@@ -383,28 +397,28 @@ function prepareTx(txid, txindex, amount, myaddress, privkey, timestamp, contrib
     value: new_quantity_of_sats,
   });
   psbt.signInput(0, ECPair.fromPrivateKey(Buffer.from(privkey, 'hex')));
-  var getFinalScripts = (txindex, input, script) => {
-    //Step 1: Check to make sure the meaningful locking script matches what you expect.
-    var decompiled = bitcoinjs.script.decompile(script);
-    if (!decompiled) {
-      throw new Error(`Can not finalize input #${txindex}`);
-    }
-    //Step 2: Create final scripts
-    var stack_elements = [];
-    stack_elements.push(input.partialSig[0].signature);
-    stack_elements.push(bitcoinjs.script.OPS.OP_1);
-    var witnessStack = bitcoinjs.payments.p2wsh({
-      redeem: {
-        output: script,
-        input: bitcoinjs.script.compile(stack_elements),
-      },
-    });
-    return {
-      finalScriptWitness: witnessStackToScriptWitness(witnessStack.witness),
-    };
-  };
   psbt.finalizeInput(0, getFinalScripts);
   return psbt.extractTransaction().toHex();
+}
+function getFinalScripts(txindex, input, script) {
+  //Step 1: Check to make sure the meaningful locking script matches what you expect.
+  var decompiled = bitcoinjs.script.decompile(script);
+  if (!decompiled) {
+    throw new Error(`Can not finalize input #${txindex}`);
+  }
+  //Step 2: Create final scripts
+  var stack_elements = [];
+  stack_elements.push(input.partialSig[0].signature);
+  stack_elements.push(bitcoinjs.script.OPS.OP_1);
+  var witnessStack = bitcoinjs.payments.p2wsh({
+    redeem: {
+      output: script,
+      input: bitcoinjs.script.compile(stack_elements),
+    },
+  });
+  return {
+    finalScriptWitness: witnessStackToScriptWitness(witnessStack.witness),
+  };
 }
 function createQR(content) {
   var dataUriPngImage = document.createElement('img'),
@@ -421,14 +435,14 @@ function createQR(content) {
   return dataUriPngImage;
 }
 function witnessStackToScriptWitness(witness) {
-  let buffer2 = buffer.Buffer.allocUnsafe(0);
+  let buffer2 = Buffer.allocUnsafe(0);
   function writeSlice(slice) {
-    buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.from(slice)]);
+    buffer2 = Buffer.concat([buffer2, Buffer.from(slice)]);
   }
   function writeVarInt(i) {
     const currentLen = buffer2.length;
     const varintLen = varuintBitcoin.encodingLength(i);
-    buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.allocUnsafe(varintLen)]);
+    buffer2 = Buffer.concat([buffer2, Buffer.allocUnsafe(varintLen)]);
     varuintBitcoin.encode(i, buffer2, currentLen);
   }
   function writeVarSlice(slice) {
@@ -443,11 +457,11 @@ function witnessStackToScriptWitness(witness) {
   return buffer2;
 }
 async function showQR(message) {
-  if (!document.getElementById('address').value) {
+  if (!refundAddress.value) {
     alert('please try again and remember to add a bitcoin address');
     return;
   }
-  sessionStorage['refund_address'] = document.getElementById('address').value;
+  sessionStorage['refund_address'] = refundAddress.value;
   var a = document.createElement('a');
   a.href = 'bitcoin:' + message.toLowerCase();
   a.target = '_blank';
@@ -465,7 +479,7 @@ async function showQR(message) {
     var txid = await getIdOfTxThatSentMoneyToAddress(message);
     var url = 'https://mempool.space/api/tx/' + txid;
     var tx = await getData(url);
-    var tx = JSON.parse(tx);
+    tx = JSON.parse(tx);
     var txindex = 202020202020202020;
     var amount = 0;
     tx['vout'].forEach(function (vout, index) {
@@ -588,7 +602,7 @@ function txsubmit(txid, txindex, amount) {
   redemption_content['redemption_url'] = url;
   redemption_file['content'] = redemption_content;
   saveData(JSON.stringify(redemption_file), 'redemption_file.json');
-  var url = window.location.href.substring(0, window.location.href.indexOf('contribute.htm')) + 'redemption.html';
+  url = window.location.href.substring(0, window.location.href.indexOf('contribute.htm')) + 'redemption.html';
   var alert = `A file called redemption_file.json was just downloaded on your computer. This file contains all of the information you need to recover your money if the fundraiser does not raise the right amount. Just wait til the fundraiser has been over for 24 hours and then visit this link to redeem your money: <a href="${url}" target="_blank">${url}</a> -- note that you may need to upload the file you just downloaded to that page so keep that file. Your oracle also has a copy of your refund transaction and will try to broadcast it for you if the fundraiser doesn't meet its goal, so you might see your money arrive in your bitcoin wallet without even going to that web page, but if the oracle goes down for some reason this file will let you recover your money without them.`;
   document.getElementById('modal').innerHTML = '';
   document.getElementById(
@@ -613,7 +627,7 @@ function modalVanish() {
   document.getElementById('black-bg').style.display = 'none';
   document.getElementById('modal').style.display = 'none';
 }
-function getData(url) {
+function getData(url): Promise<string> {
   return new Promise(function (resolve, reject) {
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function () {
@@ -625,8 +639,8 @@ function getData(url) {
     xhttp.send();
   });
 }
-function satsToBitcoin(sats) {
-  return '0.' + String(sats).padStart(8, '0');
+function satsToBitcoin(sats: number): number {
+  return +('0.' + String(sats).padStart(8, '0'));
 }
 </script>
 <template>
